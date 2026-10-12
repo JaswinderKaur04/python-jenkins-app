@@ -1,56 +1,27 @@
 pipeline {
     agent any
-
-    environment {
-        APP_PORT = '8000'
-        APP_SCRIPT = 'app.py'
-    }
-
     stages {
-        stage('Fetch SCM') {
+        stage('Checkout Code') {
             steps {
-                echo 'Checking out latest commit from GitHub...'
+                // Pulls code from your GitHub repository
                 checkout scm
             }
         }
-
-        stage('Pre-Flight & Dependency Check') {
+        stage('Test Python Syntax') {
             steps {
-                sh '''
-                    echo "[STATUS] Verifying host dependencies..."
-                    python3 --version
-                    which pkill || (sudo apt-get update && sudo apt-get install -y psmisc)
-                '''
+                // Validates that your Python script has no syntax errors
+                sh 'python3 -m py_compile app.py'
             }
         }
-
         stage('Deploy Microservice') {
             steps {
+                // Clears port 8000 and launches the microservice cleanly in the background
                 sh '''
-                    echo "[DEPLOY] Cycling previous service allocations..."
-                    pkill -f "python3 ${APP_SCRIPT}" || true
-
-                    echo "[DEPLOY] Spawning service with process persistence..."
-                    export JENKINS_NODE_COOKIE=dontKillMe
-                    nohup python3 ${APP_SCRIPT} > app.log 2>&1 &
-
-                    sleep 2
-                    echo "[VERIFY] Capturing boot logs:"
-                    cat app.log
+                fuser -k 8000/tcp || true
+                nohup python3 app.py > server.log 2>&1 </dev/null &
+                echo "Microservice deployed successfully!"
                 '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "================================================="
-            echo " SUCCESS: Application successfully deployed!"
-            echo " Endpoint: http://<AWS-EC2-PUBLIC-IP>:8000/"
-            echo "================================================="
-        }
-        failure {
-            echo " CRITICAL: Pipeline encountered an execution fault."
         }
     }
 }
